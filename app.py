@@ -4,7 +4,7 @@ from datetime import datetime
 
 # 페이지 설정
 st.set_page_config(page_title="My Brainstorming", layout="centered")
-st.title("🧠 형님의 아이디어 브레인스토밍")
+st.title("🧠 아이디어 브레인스토밍")
 
 # 데이터 저장소 (세션이 유지되는 동안만 저장됩니다)
 if 'my_ideas' not in st.session_state:
