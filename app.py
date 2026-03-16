@@ -1,97 +1,92 @@
 import streamlit as st
 
 # 1. 페이지 설정
-st.set_page_config(page_title="Visual Idea Board", layout="wide")
+st.set_page_config(page_title="Idea Board", layout="wide")
 st.title("📍 자유 배치 아이디어 보드")
 
-# 2. 데이터 초기화 (에러 방지를 위해 세션 상태를 확실히 잡습니다)
-if 'nodes' not in st.session_state:
+# 2. 세션 상태 초기화 (에러 원천 차단)
+if 'nodes' not in st.session_state or st.sidebar.button("🧹 보드 완전 초기화"):
     st.session_state.nodes = [
-        {'id': 0, 'text': '점심메뉴', 'x': 100, 'y': 100, 'done': True, 'parent': None}
+        {'id': 0, 'text': '시작점', 'x': 50, 'y': 50, 'done': True}
     ]
+    st.rerun()
 
-# 3. 새로운 가지 추가 로직
+# 3. 새로운 가지 추가
 with st.expander("➕ 새 아이디어 가지치기", expanded=True):
-    col1, col2, col3 = st.columns([2, 2, 1])
-    
-    # 현재 존재하는 노드 리스트 생성
-    node_options = list(range(len(st.session_state.nodes)))
-    
+    col1, col2 = st.columns([3, 1])
     with col1:
-        parent_idx = st.selectbox(
-            "어디서 뻗어나갈까요?", 
-            options=node_options, 
-            format_func=lambda x: st.session_state.nodes[x]['text']
-        )
+        new_text = st.text_input("아이디어 내용", placeholder="내용을 적으세요", key="input_new")
     with col2:
-        new_text = st.text_input("아이디어 내용", placeholder="예: 김치찌개")
-    with col3:
-        st.write("") # 간격 맞추기용
         if st.button("가지 추가") and new_text:
-            p_node = st.session_state.nodes[parent_idx]
-            st.session_state.nodes.append({
+            # 마지막 노드의 위치를 기준으로 새 노드 생성
+            last_node = st.session_state.nodes[-1]
+            new_node = {
                 'id': len(st.session_state.nodes),
                 'text': new_text,
-                'x': p_node['x'] + 150,
-                'y': p_node['y'] + 80,
-                'done': False,
-                'parent': parent_idx
-            })
+                'x': last_node['x'] + 50,
+                'y': last_node['y'] + 50,
+                'done': False
+            }
+            st.session_state.nodes.append(new_node)
             st.rerun()
 
 st.divider()
 
-# 4. 스타일 정의 (박스 및 선 그리기용)
-st.markdown("""
-    <style>
-    .canvas { position: relative; height: 500px; background-color: #f8f9fa; border: 1px solid #e0e0e0; border-radius: 15px; overflow: hidden; }
-    .node-box {
-        position: absolute;
-        padding: 12px 20px;
-        border: 2px solid #004d99;
-        background: white;
-        border-radius: 8px;
-        font-weight: bold;
-        box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
-        z-index: 2;
-    }
-    .node-done { border-color: #28a745; color: #28a745; background-color: #f0fff4; }
-    </style>
-""", unsafe_allow_html=True)
-
-# 5. 메인 레이아웃: 사이드바(설정)와 메인(캔버스) 분리
-side_col, main_col = st.columns([1, 3])
-
-with main_col:
-    # 캔버스 시작
-    st.write("##### 💡 보드 레이아웃")
-    canvas_html = '<div class="canvas">'
-    
-    for node in st.session_state.nodes:
-        status_style = "node-done" if node['done'] else ""
-        icon = "✅" if node['done'] else "✍️"
-        canvas_html += f'<div class="node-box {status_style}" style="left: {node["x"]}px; top: {node["y"]}px;">{icon} {node["text"]}</div>'
-        
-        # 부모가 있다면 선 긋기 (간단한 직선 표현)
-        if node['parent'] is not None:
-            p = st.session_state.nodes[node['parent']]
-            # 선을 위한 SVG는 복잡하므로 여기서는 텍스트 박스로 느낌만 냅니다.
-    
-    canvas_html += '</div>'
-    st.markdown(canvas_html, unsafe_allow_html=True)
+# 4. 화면 레이아웃
+side_col, main_col = st.columns([1, 2])
 
 with side_col:
-    st.write("##### ⚙️ 위치 및 상태 조절")
-    for i, node in enumerate(st.session_state.nodes):
-        with st.expander(f"{node['text']}"):
-            st.session_state.nodes[i]['done'] = st.checkbox("작성 완료", value=node['done'], key=f"d_{i}")
-            st.session_state.nodes[i]['x'] = st.slider("좌표 X", 0, 800, node['x'], key=f"x_{i}")
-            st.session_state.nodes[i]['y'] = st.slider("좌표 Y", 0, 400, node['y'], key=f"y_{i}")
-            if st.button("삭제", key=f"del_{i}"):
-                if i != 0: # 루트는 삭제 불가
-                    st.session_state.nodes.pop(i)
-                    st.rerun()
+    st.subheader("⚙️ 개별 설정")
+    # 리스트를 복사해서 루프를 돌려야 삭제 시 에러가 안 납니다.
+    for i, node in enumerate(list(st.session_state.nodes)):
+        with st.expander(f"📌 {node['text']}"):
+            st.session_state.nodes[i]['text'] = st.text_input("이름 수정", value=node['text'], key=f"edit_{i}")
+            st.session_state.nodes[i]['done'] = st.checkbox("작성 완료", value=node['done'], key=f"chk_{i}")
+            st.session_state.nodes[i]['x'] = st.slider("좌표 X", 0, 1000, node['x'], key=f"x_val_{i}")
+            st.session_state.nodes[i]['y'] = st.slider("좌표 Y", 0, 600, node['y'], key=f"y_val_{i}")
 
-if st.sidebar.button("🧹 전체 초기화"):
-    del st.session_state.nodes
-    st.rerun()
+with main_col:
+    st.subheader("💡 캔버스")
+    
+    # CSS 설정
+    st.markdown("""
+        <style>
+        .canvas-area { 
+            position: relative; 
+            width: 100%; 
+            height: 600px; 
+            background-color: #f0f2f6; 
+            border: 2px dashed #bdc3c7; 
+            border-radius: 20px; 
+        }
+        .node-card {
+            position: absolute;
+            padding: 15px;
+            background: white;
+            border: 2px solid #3498db;
+            border-radius: 10px;
+            box-shadow: 3px 3px 10px rgba(0,0,0,0.1);
+            font-weight: bold;
+            min-width: 120px;
+            text-align: center;
+        }
+        .node-card-done {
+            border-color: #2ecc71;
+            background-color: #fafffa;
+            color: #27ae60;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+    # 노드들을 화면에 배치
+    html_content = '<div class="canvas-area">'
+    for node in st.session_state.nodes:
+        done_class = "node-card-done" if node['done'] else ""
+        status_icon = "✅" if node['done'] else "📝"
+        html_content += f'''
+            <div class="node-card {done_class}" style="left:{node['x']}px; top:{node['y']}px;">
+                {status_icon} {node['text']}
+            </div>
+        '''
+    html_content += '</div>'
+    st.markdown(html_content, unsafe_allow_html=True)
