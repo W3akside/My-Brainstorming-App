@@ -1,102 +1,64 @@
 import streamlit as st
-import uuid
+import pandas as pd
 
-# 1. 페이지 설정 (깔끔하게 위로 딱 붙임)
-st.set_page_config(page_title="MindMap Brainstorming", layout="wide")
-st.title("🧠 무한 확장 아이디어 보드")
-st.caption("중앙의 텍스트박스부터 시작해 생각을 무한히 확장해보세요.")
+# 페이지 설정
+st.set_page_config(page_title="Visual Idea Board", layout="wide")
+st.title("📍 자유 배치 아이디어 보드")
 
-# 2. 데이터 구조 정의 (세션 상태 초기화)
-# 각 아이디어는 고유 ID, 내용, 그리고 자식 아이디어들의 ID 리스트를 갖습니다.
+# 데이터 저장 (노드 정보: ID, 내용, X좌표, Y좌표, 완료여부, 부모ID)
 if 'nodes' not in st.session_state:
-    st.session_state.nodes = {}
-    st.session_state.root_id = None
+    st.session_state.nodes = [
+        {'id': 0, 'text': '점심메뉴', 'x': 100, 'y': 100, 'done': True, 'parent': None}
+    ]
 
-# 3. 핵심 기능: 아이디어 노드 렌더링 함수 (재귀 호출 방식)
-def render_node(node_id, depth=0):
-    node = st.session_state.nodes.get(node_id)
-    if not node: return
+# --- 상단 컨트롤러 (새 노드 추가) ---
+with st.expander("➕ 새 아이디어 가지치기", expanded=True):
+    col1, col2, col3 = st.columns([2, 1, 1])
+    with col1:
+        parent_idx = st.selectbox("어디서 뻗어나갈까요?", options=range(len(st.session_state.nodes)), 
+                                  format_func=lambda x: st.session_state.nodes[x]['text'])
+    with col2:
+        new_text = st.text_input("아이디어 내용")
+    with col3:
+        if st.button("가지 추가") and new_text:
+            p_node = st.session_state.nodes[parent_idx]
+            # 부모 근처 랜덤 위치에 생성 (살짝 아래 오른쪽)
+            st.session_state.nodes.append({
+                'id': len(st.session_state.nodes),
+                'text': new_text,
+                'x': p_node['x'] + 150,
+                'y': p_node['y'] + 100,
+                'done': False,
+                'parent': parent_idx
+            })
+            st.rerun()
 
-    # 깊이에 따라 들여쓰기와 스타일을 적용하여 시각적인 계층 구조 표현
-    indent = "    " * depth
-    node_key = f"node_{node_id}"
-    
-    # --- [핵심] 아이디어 박스 (Expander) ---
-    # 클릭하면 열려서 내용을 수정하거나 자식을 추가할 수 있습니다.
-    box_label = f"💡 {node['text'][:30]}..." if node['text'] else "🆕 새 생각..."
-    with st.expander(f"{indent}{box_label}", expanded=(depth == 0)): # 루트는 기본으로 열어둠
-        
-        # 3-1. 내용 수정 부분
-        col1, col2 = st.columns([4, 1])
-        with col1:
-            edited_text = st.text_area("내용 수정", value=node['text'], key=f"edit_text_{node_id}", height=68, label_visibility="collapsed")
-        with col2:
-            if st.button("저장", key=f"save_{node_id}"):
-                st.session_state.nodes[node_id]['text'] = edited_text
-                st.rerun()
-            if depth > 0: # 루트 노드는 삭제 불가
-                if st.button("삭제", key=f"del_{node_id}"):
-                    # 부모 노드의 자식 리스트에서 자신을 제거
-                    parent_id = node.get('parent_id')
-                    if parent_id and parent_id in st.session_state.nodes:
-                        st.session_state.nodes[parent_id]['children'].remove(node_id)
-                    # 자신과 하위 노드들을 삭제 (간단하게 자신만 삭제)
-                    del st.session_state.nodes[node_id]
-                    st.rerun()
+# --- 캔버스 구현 (HTML/CSS 활용) ---
+# 스트림릿 내부에 자유 배치를 흉내내기 위한 커스텀 스타일
+st.markdown("""
+    <style>
+    .canvas { position: relative; height: 600px; background-color: #f0f2f6; border-radius: 10px; border: 1px solid #ddd; }
+    .node { position: absolute; padding: 10px; border: 2px solid #004d99; background: white; border-radius: 5px; min-width: 100px; text-align: center; }
+    .node-done { border-color: #28a745; background-color: #f8fff9; }
+    .line { position: absolute; background-color: #004d99; height: 2px; transform-origin: top left; z-index: 0; opacity: 0.3; }
+    </style>
+""", unsafe_allow_html=True)
 
-        st.divider()
+# 노드 배치 및 수정
+for i, node in enumerate(st.session_state.nodes):
+    # 각 노드를 조절할 수 있는 사이드바 설정 (위치 이동용)
+    with st.sidebar.expander(f"📍 {node['text']} 설정"):
+        st.session_state.nodes[i]['text'] = st.text_input(f"내용 수정", value=node['text'], key=f"t_{i}")
+        st.session_state.nodes[i]['x'] = st.slider(f"좌표 X", 0, 1000, node['x'], key=f"x_{i}")
+        st.session_state.nodes[i]['y'] = st.slider(f"좌표 Y", 0, 500, node['y'], key=f"y_{i}")
+        st.session_state.nodes[i]['done'] = st.checkbox("작성 완료 (체크박스)", value=node['done'], key=f"d_{i}")
 
-        # 3-2. 자식 아이디어(가지) 추가 부분
-        c1, c2 = st.columns([4, 1])
-        with c1:
-            child_text = st.text_input("여기에 뻗어나갈 생각을 적으세요...", key=f"child_input_{node_id}", placeholder="새로운 가지치기...")
-        with c2:
-            if st.button("가지 추가", key=f"add_child_{node_id}") and child_text:
-                # 새로운 노드 생성
-                new_id = str(uuid.uuid4())
-                st.session_state.nodes[new_id] = {
-                    'text': child_text,
-                    'children': [],
-                    'parent_id': node_id
-                }
-                # 현재 노드의 자식 리스트에 추가
-                st.session_state.nodes[node_id]['children'].append(new_id)
-                st.rerun()
+    # 화면에 그리기 (HTML 스타일)
+    status_class = "node-done" if node['done'] else ""
+    st.markdown(f"""
+        <div class="node {status_class}" style="left: {node['x']}px; top: {node['y']}px;">
+            { "✅" if node['done'] else "✍️" } {node['text']}
+        </div>
+    """, unsafe_allow_html=True)
 
-    # --- [핵심] 자식 노드들을 재귀적으로 렌더링 (가지 뻗기) ---
-    if node['children']:
-        for child_id in node['children']:
-            render_node(child_id, depth + 1)
-
-
-# 4. 화면 출력 부분
-# 4-1. 루트 노드(가운데 시작점)가 없는 경우 생성
-if not st.session_state.root_id or not st.session_state.nodes:
-    st.session_state.nodes = {} # 초기화
-    root_id = str(uuid.uuid4())
-    st.session_state.nodes[root_id] = {
-        'text': "핵심 주제를 적고 시작하세요", # 초기 메시지
-        'children': [],
-        'parent_id': None
-    }
-    st.session_state.root_id = root_id
-
-# 4-2. 메인 보드 (가운데 정렬)
-st.divider()
-col_left, col_main, col_right = st.columns([1, 4, 1])
-
-with col_main:
-    # 루트 노드부터 시작해 모든 가지를 렌더링
-    render_node(st.session_state.root_id)
-
-
-# 5. 데이터 관리 기능 (사이드바)
-with st.sidebar:
-    st.subheader("🛠️ 보드 관리")
-    if st.button("전체 초기화 (새 보드)"):
-        st.session_state.nodes = {}
-        st.session_state.root_id = None
-        st.rerun()
-    
-    st.divider()
-    st.caption("💡 팁: 각 생각을 클릭하면 내용을 고치거나 새로운 가지를 뻗을 수 있습니다.")
+st.info("💡 왼쪽 사이드바에서 노드를 드래그(슬라이더)하여 위치를 옮기거나 완료 체크를 할 수 있습니다.")
